@@ -6,7 +6,7 @@
  * @author Alex Stillwagon
  * @url https://alexstillwagon.com
  * @package Auctions for WooCommerce\ASD\Includes
- * @version 1.0
+ * @version 1.1
  * @updated Nov 2021
  * Note: The incorrect spelling of 'bider' is the "correct" metadata key
  * from the auction plugin.
@@ -70,7 +70,7 @@ function asd_create_order( int $id ): void {
 			 * 6. refunded
 			 * 7. failed
 			 */
-			'status'      => 'processing',
+			'status'      => 'pending-payment',
 		]
 	);
 
@@ -151,8 +151,7 @@ function asd_create_order( int $id ): void {
 	//region Save Order to Database ---------------------------------------------
 
 	//Change Order Status (see Notes above)
-	//$order->update_status( 'completed' );
-
+	$order->update_status( 'processing', "Auto Order on Auction End - ", true );
 	// Save Orders
 	$order->save();
 	//endregion Save Order to Database
