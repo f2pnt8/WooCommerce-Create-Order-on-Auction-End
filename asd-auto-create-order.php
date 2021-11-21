@@ -6,7 +6,7 @@
  * @author Alex Stillwagon
  * @url https://alexstillwagon.com
  * @package Auctions for WooCommerce\ASD\Includes
- * @version 1.1
+ * @version 1.2
  * @updated Nov 2021
  * Note: The incorrect spelling of 'bider' is the "correct" metadata key
  * from the auction plugin.
@@ -33,6 +33,7 @@ add_action( 'auctions_for_woocommerce_won', 'asd_create_order', 10, 1 );
  *
  * @return void
  * @throws WC_Data_Exception
+ * @throws Exception
  */
 function asd_create_order( int $id ): void {
 
@@ -150,9 +151,57 @@ function asd_create_order( int $id ): void {
 
 	//region Save Order to Database ---------------------------------------------
 
+	$order->set_customer_ip_address( WC_Geolocation::get_ip_address() );
+	$order->set_customer_user_agent( wc_get_user_agent() );
+	$order->set_currency( get_woocommerce_currency() );
+	$order->set_customer_id( $high_bidder );
+	$order->set_created_via( 'automatic' );
 	//Change Order Status (see Notes above)
 	$order->update_status( 'processing', "Auto Order on Auction End - ", true );
-	// Save Orders
-	$order->save();
+
+	// Save the Order
+	$order_id = $order->save();
 	//endregion Save Order to Database
+
+	asd_save_order_meta( $order_id );
+}
+
+/**
+ * Save the Order Metadata used by the Auction Plugin
+ * Code copied from Auction for WooCommerce plugin
+ * wp-content/plugins/auctions-for-woocommerce/admin/class-auctions-for-woocommerce-admin.php
+ * @return void
+ * @throws Exception
+ */
+function asd_save_order_meta( $order_id ) {
+
+	$order = wc_get_order( $order_id );
+
+	if ( $order ) {
+
+		$order_items = $order->get_items();
+
+		if ( $order_items ) {
+			foreach ( $order_items as $item_id => $item ) {
+				if ( function_exists( 'wc_get_order_item_meta' ) ) {
+					$item_meta = wc_get_order_item_meta( $item_id, '' );
+				} else {
+					$item_meta = method_exists( $order, 'wc_get_order_item_meta' ) ? $order->wc_get_order_item_meta( $item_id ) : $order->get_item_meta( $item_id );
+				}
+				$product_id   = $item_meta[ '_product_id' ][ 0 ];
+				$product_data = wc_get_product( $product_id );
+				if ( $product_data && $product_data->is_type( 'auction' ) ) {
+					update_post_meta( $order_id, '_auction', '1' );
+					update_post_meta( $product_id, '_order_id', $order_id, true );
+					update_post_meta( $product_id, '_stop_mails', '1' );
+					if ( ! $product_data->is_finished() ) {
+						wp_set_post_terms( $product_id, [ 'buy-now', 'finished' ], 'auction_visibility', true );
+						update_post_meta( $product_id, '_buy_now', '1' );
+						update_post_meta( $product_id, '_auction_dates_to', gmdate( 'Y-m-h h:s' ) );
+						do_action( 'auctions_for_woocommerce_close_buynow', $product_id );
+					}
+				}
+			}
+		}
+	}
 }
